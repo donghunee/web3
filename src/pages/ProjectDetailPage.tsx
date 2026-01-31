@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Moon, Sun, Sparkles, Calendar, CheckCircle2, Plus, Image, Monitor, Clock, Play, Link, Loader2 } from 'lucide-react'
+import { ArrowLeft, Moon, Sun, Sparkles, Calendar, CheckCircle2, Plus, Image, Monitor, Clock, Play, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -14,10 +14,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { uploadScreenshot, createScreen, getScreensByProjectId, saveEvaluationResult, getProjectById, type Screen } from '@/lib/supabase'
+import { uploadScreenshot, createScreen, getScreensByProjectId, saveEvaluationResult, getProjectById, getEvaluationResultsByScreenId, type Screen, type EvaluationResultDB } from '@/lib/supabase'
 import { evaluateScreen } from '@/lib/evaluation'
-import { analyzeUrl, screenshotUrlToFile } from '@/lib/urlAnalysis'
-import { analyzePerformance, getScoreColor, getVitalStatus, getVitalStatusColor, formatVitalValue, type PerformanceResult } from '@/lib/performanceAnalysis'
 
 interface ProjectDetailPageProps {
   isDarkMode: boolean
@@ -66,10 +64,10 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
   const [screens, setScreens] = useState<Screen[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [evaluatingScreenId, setEvaluatingScreenId] = useState<string | null>(null)
+  const [screenEvaluations, setScreenEvaluations] = useState<Record<string, EvaluationResultDB>>({})
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'upload' | 'url'>('upload')
   const [screenName, setScreenName] = useState('')
   const [screenPurpose, setScreenPurpose] = useState('')
   const [userActions, setUserActions] = useState('')
@@ -79,16 +77,6 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
   const [isSaving, setIsSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // URL input state
-  const [urlInput, setUrlInput] = useState('')
-  const [isAnalyzingUrl, setIsAnalyzingUrl] = useState(false)
-  const [urlScreenshotUrl, setUrlScreenshotUrl] = useState<string | null>(null)
-  const [urlError, setUrlError] = useState<string | null>(null)
-
-  // Performance analysis state
-  const [performanceResult, setPerformanceResult] = useState<PerformanceResult | null>(null)
-  const [isAnalyzingPerformance, setIsAnalyzingPerformance] = useState(false)
-
   // AI Evaluation progress modal state
   type EvaluationStep = 'preparing' | 'grid' | 'analyzing' | 'saving' | 'complete' | 'error'
   const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false)
@@ -96,7 +84,7 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
   const [evaluationProgress, setEvaluationProgress] = useState(0)
   const [evaluationError, setEvaluationError] = useState<string | null>(null)
 
-  const isFormValid = screenName.trim() && screenPurpose.trim() && userActions.trim()
+  const isFormValid = screenName.trim() && screenPurpose.trim() && userActions.trim() && screenshot
 
   // Load project from DB if not passed via state
   useEffect(() => {
@@ -137,6 +125,17 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
     setIsLoading(true)
     const loadedScreens = await getScreensByProjectId(projectId)
     setScreens(loadedScreens)
+
+    // Load evaluation results for each screen
+    const evaluations: Record<string, EvaluationResultDB> = {}
+    for (const screen of loadedScreens) {
+      const results = await getEvaluationResultsByScreenId(screen.id)
+      if (results.length > 0) {
+        // Get the most recent evaluation
+        evaluations[screen.id] = results[0]
+      }
+    }
+    setScreenEvaluations(evaluations)
     setIsLoading(false)
   }
 
@@ -171,48 +170,6 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
     }
   }
 
-  // URL analysis handler
-  const handleAnalyzeUrl = async () => {
-    if (!urlInput.trim()) return
-
-    setIsAnalyzingUrl(true)
-    setUrlError(null)
-    setUrlScreenshotUrl(null)
-    setPerformanceResult(null)
-
-    try {
-      const result = await analyzeUrl(urlInput.trim())
-
-      // Set screenshot preview
-      setUrlScreenshotUrl(result.screenshotUrl)
-
-      // Auto-fill form fields from metadata
-      if (!screenName && result.metadata.title) {
-        setScreenName(result.metadata.title)
-      }
-      if (!screenPurpose && result.metadata.description) {
-        setScreenPurpose(result.metadata.description)
-      }
-
-      // Start performance analysis in background
-      setIsAnalyzingPerformance(true)
-      try {
-        const perfResult = await analyzePerformance(urlInput.trim(), 'mobile')
-        setPerformanceResult(perfResult)
-      } catch (perfError) {
-        console.error('Performance analysis error:', perfError)
-        // Don't show error - performance analysis is optional
-      } finally {
-        setIsAnalyzingPerformance(false)
-      }
-    } catch (error) {
-      console.error('URL analysis error:', error)
-      setUrlError('URL을 분석할 수 없습니다. 유효한 URL인지 확인해주세요.')
-    } finally {
-      setIsAnalyzingUrl(false)
-    }
-  }
-
   const handleAddScreen = async () => {
     setIsSaving(true)
     const currentProjectId = project?.projectId || projectIdFromUrl
@@ -222,17 +179,7 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
 
       // If we have a projectId, save to Supabase
       if (currentProjectId) {
-        // Handle URL mode - convert screenshot URL to file and upload
-        if (activeTab === 'url' && urlScreenshotUrl) {
-          const screenshotFile = await screenshotUrlToFile(urlScreenshotUrl, `url-screenshot-${Date.now()}.png`)
-          if (screenshotFile) {
-            imageUrl = await uploadScreenshot(screenshotFile, currentProjectId)
-          } else {
-            // Fallback: use the direct URL
-            imageUrl = urlScreenshotUrl
-          }
-        } else if (screenshot) {
-          // Handle upload mode
+        if (screenshot) {
           imageUrl = await uploadScreenshot(screenshot, currentProjectId)
         }
 
@@ -250,9 +197,7 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
         }
       } else {
         // No projectId - create local screen
-        if (activeTab === 'url' && urlScreenshotUrl) {
-          imageUrl = urlScreenshotUrl
-        } else if (screenshot) {
+        if (screenshot) {
           imageUrl = URL.createObjectURL(screenshot)
         }
 
@@ -286,11 +231,6 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
     setUserActions('')
     setScreenshot(null)
     setScreenshotPreview(null)
-    setUrlInput('')
-    setUrlScreenshotUrl(null)
-    setUrlError(null)
-    setPerformanceResult(null)
-    setActiveTab('upload')
     setIsModalOpen(false)
   }
 
@@ -351,6 +291,12 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
 
       if (!savedResult) {
         console.warn('평가 결과 저장에 실패했지만 결과 페이지로 이동합니다.')
+      } else {
+        // Update screen evaluations state
+        setScreenEvaluations(prev => ({
+          ...prev,
+          [screen.id]: savedResult
+        }))
       }
 
       // Step 5: Complete
@@ -424,7 +370,7 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-foreground">UX Analyzer</span>
+            <span className="font-semibold text-foreground">zero1ux</span>
           </div>
           <Button
             variant="ghost"
@@ -552,24 +498,60 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
                 </div>
 
                 {/* Analyze Button */}
-                <Button
-                  size="sm"
-                  onClick={() => handleStartEvaluation(screen)}
-                  disabled={evaluatingScreenId === screen.id}
-                  className="gap-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-                >
-                  {evaluatingScreenId === screen.id ? (
+                <div className="flex gap-2">
+                  {screenEvaluations[screen.id] ? (
                     <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      분석 중...
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/evaluation/${screenEvaluations[screen.id].id}`, {
+                          state: { screen }
+                        })}
+                        className="gap-2"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                        분석 확인
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleStartEvaluation(screen)}
+                        disabled={evaluatingScreenId === screen.id}
+                        className="gap-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                      >
+                        {evaluatingScreenId === screen.id ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            분석 중...
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-3.5 h-3.5" />
+                            재분석
+                          </>
+                        )}
+                      </Button>
                     </>
                   ) : (
-                    <>
-                      <Play className="w-3.5 h-3.5" />
-                      AI 분석 시작
-                    </>
+                    <Button
+                      size="sm"
+                      onClick={() => handleStartEvaluation(screen)}
+                      disabled={evaluatingScreenId === screen.id}
+                      className="gap-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                    >
+                      {evaluatingScreenId === screen.id ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          분석 중...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3.5 h-3.5" />
+                          AI 분석 시작
+                        </>
+                      )}
+                    </Button>
                   )}
-                </Button>
+                </div>
               </Card>
             ))}
           </div>
@@ -601,240 +583,77 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
           <DialogHeader>
             <DialogTitle>분석할 화면 추가</DialogTitle>
             <DialogDescription>
-              URL을 입력하거나 스크린샷을 업로드하세요.
+              스크린샷을 업로드하고 화면 정보를 입력하세요.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Tab Buttons */}
-          <div className="flex gap-2 border-b pb-2">
-            <button
-              onClick={() => setActiveTab('url')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                activeTab === 'url'
-                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              <Link className="w-4 h-4" />
-              URL 입력
-            </button>
-            <button
-              onClick={() => setActiveTab('upload')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                activeTab === 'upload'
-                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400'
-                  : 'text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              <Image className="w-4 h-4" />
-              이미지 업로드
-            </button>
-          </div>
-
           <div className="space-y-4 py-4">
-            {/* URL Input Tab */}
-            {activeTab === 'url' && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="urlInput">
-                    웹페이지 URL <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="urlInput"
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      placeholder="https://example.com"
-                      className="flex-1"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleAnalyzeUrl()
-                        }
-                      }}
-                    />
-                    <Button
-                      onClick={handleAnalyzeUrl}
-                      disabled={!urlInput.trim() || isAnalyzingUrl}
-                      className="gap-2"
-                    >
-                      {isAnalyzingUrl ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          분석 중
-                        </>
-                      ) : (
-                        '분석'
-                      )}
-                    </Button>
+            {/* Screenshot Upload */}
+            <div className="space-y-2">
+              <Label>스크린샷 <span className="text-destructive">*</span></Label>
+              <div
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`
+                  border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+                  ${dragActive ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-border hover:border-blue-300'}
+                  ${screenshot ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : ''}
+                `}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                {screenshotPreview ? (
+                  <div className="flex flex-col items-center w-full">
+                    <img src={screenshotPreview} alt="Preview" className="w-full max-h-48 object-contain rounded mb-2" />
+                    <p className="text-sm font-medium text-foreground">{screenshot?.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">클릭하여 변경</p>
                   </div>
-                  {urlError && (
-                    <p className="text-sm text-destructive">{urlError}</p>
-                  )}
-                </div>
-
-                {/* URL Screenshot Preview */}
-                {urlScreenshotUrl && (
-                  <div className="space-y-2">
-                    <Label>캡처된 스크린샷</Label>
-                    <div className="border rounded-lg overflow-hidden bg-muted relative">
-                      <img
-                        src={urlScreenshotUrl}
-                        alt="URL Screenshot"
-                        className="w-full h-auto max-h-64 object-contain"
-                        onLoad={() => setUrlError(null)}
-                        onError={(e) => {
-                          // Hide the broken image
-                          (e.target as HTMLImageElement).style.display = 'none'
-                        }}
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <p className="text-sm text-muted-foreground bg-background/80 px-3 py-1 rounded hidden" id="screenshot-fallback">
-                          스크린샷 미리보기 (저장 시 캡처됨)
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      페이지 정보가 자동으로 추출되었습니다. 필요시 수정하세요.
+                ) : (
+                  <>
+                    <Image className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      스크린샷을 드래그하거나 클릭하세요
                     </p>
-                  </div>
-                )}
-
-                {/* Performance Analysis Results */}
-                {isAnalyzingPerformance && (
-                  <div className="border rounded-lg p-4 bg-muted/30">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                      <span className="text-sm text-muted-foreground">성능 분석 중...</span>
-                    </div>
-                  </div>
-                )}
-
-                {performanceResult && (
-                  <div className="border rounded-lg p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-base font-semibold">성능 분석 결과</Label>
-                      <span className="text-xs text-muted-foreground">Mobile</span>
-                    </div>
-
-                    {/* Scores Grid */}
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { label: '성능', score: performanceResult.scores.performance },
-                        { label: '접근성', score: performanceResult.scores.accessibility },
-                        { label: '권장사항', score: performanceResult.scores.bestPractices },
-                        { label: 'SEO', score: performanceResult.scores.seo },
-                      ].map((item) => (
-                        <div key={item.label} className="text-center">
-                          <div className={`text-lg font-bold rounded-lg py-2 ${getScoreColor(item.score)}`}>
-                            {item.score}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">{item.label}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Core Web Vitals */}
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Core Web Vitals</p>
-                      <div className="grid grid-cols-3 gap-2 text-xs">
-                        {[
-                          { key: 'lcp', label: 'LCP', value: performanceResult.coreWebVitals.lcp },
-                          { key: 'fid', label: 'FID', value: performanceResult.coreWebVitals.fid },
-                          { key: 'cls', label: 'CLS', value: performanceResult.coreWebVitals.cls },
-                        ].map((vital) => {
-                          const status = getVitalStatus(vital.key, vital.value)
-                          return (
-                            <div key={vital.key} className={`p-2 rounded-lg text-center ${getVitalStatusColor(status)}`}>
-                              <p className="font-medium">{vital.label}</p>
-                              <p className="text-sm font-bold">{formatVitalValue(vital.key, vital.value)}</p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Top Issues */}
-                    {performanceResult.opportunities.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">개선 필요 항목</p>
-                        <div className="space-y-1 max-h-32 overflow-y-auto">
-                          {performanceResult.opportunities.slice(0, 5).map((issue) => (
-                            <div key={issue.id} className="flex items-center justify-between text-xs p-2 bg-muted/50 rounded">
-                              <span className="truncate flex-1">{issue.title}</span>
-                              {issue.displayValue && (
-                                <span className="text-muted-foreground ml-2">{issue.displayValue}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      PNG, JPG, GIF (최대 10MB)
+                    </p>
+                  </>
                 )}
               </div>
-            )}
-
-            {/* Upload Tab */}
-            {activeTab === 'upload' && (
-              <div className="space-y-2">
-                <Label>스크린샷 (선택)</Label>
-                <div
-                  onDragEnter={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDragOver={handleDrag}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`
-                    border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
-                    ${dragActive ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : 'border-border hover:border-blue-300'}
-                    ${screenshot ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20' : ''}
-                  `}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/gif"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  {screenshotPreview ? (
-                    <div className="flex flex-col items-center w-full">
-                      <img src={screenshotPreview} alt="Preview" className="w-full max-h-48 object-contain rounded mb-2" />
-                      <p className="text-sm font-medium text-foreground">{screenshot?.name}</p>
-                      <p className="text-xs text-muted-foreground mt-1">클릭하여 변경</p>
-                    </div>
-                  ) : (
-                    <>
-                      <Image className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        스크린샷을 드래그하거나 클릭하세요
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        PNG, JPG, GIF (최대 10MB)
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
+            </div>
 
             {/* Common Fields */}
             <div className="space-y-2">
               <Label htmlFor="screenName">
                 화면 이름 <span className="text-destructive">*</span>
+                <span className="text-xs text-muted-foreground ml-2">(Tab으로 자동완성)</span>
               </Label>
               <Input
                 id="screenName"
                 value={screenName}
                 onChange={(e) => setScreenName(e.target.value)}
                 placeholder="예: 회원가입 페이지"
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && !screenName.trim()) {
+                    e.preventDefault()
+                    setScreenName('프로젝트 리스트 페이지')
+                  }
+                }}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="screenPurpose">
                 화면의 목적 <span className="text-destructive">*</span>
+                <span className="text-xs text-muted-foreground ml-2">(Tab으로 자동완성)</span>
               </Label>
               <Textarea
                 id="screenPurpose"
@@ -843,12 +662,19 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
                 placeholder="이 화면에서 사용자가 달성해야 할 목표를 설명하세요..."
                 rows={3}
                 className="resize-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && !screenPurpose.trim()) {
+                    e.preventDefault()
+                    setScreenPurpose('사용자가 생성한 프로젝트 목록을 확인하고 원하는 프로젝트를 선택하여 상세 정보를 조회하는 것이 목표입니다.')
+                  }
+                }}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="userActions">
                 사용자 액션 <span className="text-destructive">*</span>
+                <span className="text-xs text-muted-foreground ml-2">(Tab으로 자동완성)</span>
               </Label>
               <Textarea
                 id="userActions"
@@ -857,6 +683,12 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
                 placeholder="사용자가 이 화면에서 수행해야 할 구체적인 행동을 나열하세요..."
                 rows={3}
                 className="resize-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && !userActions.trim()) {
+                    e.preventDefault()
+                    setUserActions('프로젝트 목록 스크롤하여 확인\n프로젝트 카드 클릭하여 상세 페이지 이동\n새 프로젝트 생성 버튼 클릭')
+                  }
+                }}
               />
             </div>
           </div>
@@ -867,11 +699,7 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
             </Button>
             <Button
               onClick={handleAddScreen}
-              disabled={
-                !isFormValid ||
-                isSaving ||
-                (activeTab === 'url' && !urlScreenshotUrl)
-              }
+              disabled={!isFormValid || isSaving}
               className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
             >
               {isSaving ? '저장 중...' : '화면 추가'}

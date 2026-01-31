@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Moon, Sun, Sparkles, Monitor, TrendingUp, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, Moon, Sun, Sparkles, Monitor, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Wand2, X, Download, Loader2, Check, PanelRightClose, PanelRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { EvaluationResult, CategoryEvaluation } from '@/lib/evaluation'
-import { getEvaluationResultById, getScreenById, type Screen } from '@/lib/supabase'
+import { getEvaluationResultById, getScreenById, saveImprovedUI, type Screen } from '@/lib/supabase'
+import { generateImprovedUI, captureAsImage } from '@/lib/uiImprovement'
 
 interface EvaluationResultPageProps {
   isDarkMode: boolean
@@ -215,18 +216,32 @@ export function EvaluationResultPage({ isDarkMode, toggleDarkMode }: EvaluationR
   const [screen, setScreen] = useState<Screen | null>(location.state?.screen || null)
   const [isLoading, setIsLoading] = useState(!location.state?.result)
 
+  // UI Improvement states
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [improvedUI, setImprovedUI] = useState<{ html: string; description: string } | null>(null)
+  const [showImprovedModal, setShowImprovedModal] = useState(false)
+  const [generationError, setGenerationError] = useState<string | null>(null)
+  const [isSaved, setIsSaved] = useState(false)
+  const [showDescription, setShowDescription] = useState(true)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [evaluationId, setEvaluationId] = useState<string | null>(id || null)
+
   // Load result and screen from Supabase
   useEffect(() => {
     async function loadData() {
       if (id) {
         setIsLoading(true)
 
-        // Load result if not passed via state
+        // Always load from DB to get the latest data including saved improved UI
+        const dbResult = await getEvaluationResultById(id)
         let screenId: string | null = null
-        if (!result) {
-          const dbResult = await getEvaluationResultById(id)
-          if (dbResult) {
-            screenId = dbResult.screen_id
+
+        if (dbResult) {
+          screenId = dbResult.screen_id
+          setEvaluationId(dbResult.id)
+
+          // Only update result if not passed via state (to preserve fresh evaluation)
+          if (!result) {
             setResult({
               screenId: dbResult.screen_id || dbResult.id,
               screenName: dbResult.screen_name,
@@ -237,8 +252,19 @@ export function EvaluationResultPage({ isDarkMode, toggleDarkMode }: EvaluationR
               categories: dbResult.categories as CategoryEvaluation[],
               createdAt: dbResult.created_at,
             })
+          } else {
+            screenId = result.screenId
           }
-        } else {
+
+          // Always load saved improved UI if exists
+          if (dbResult.improved_ui_html) {
+            setImprovedUI({
+              html: dbResult.improved_ui_html,
+              description: dbResult.improved_ui_description || '',
+            })
+            setIsSaved(true)
+          }
+        } else if (result) {
           screenId = result.screenId
         }
 
@@ -255,6 +281,68 @@ export function EvaluationResultPage({ isDarkMode, toggleDarkMode }: EvaluationR
     }
     loadData()
   }, [id, result])
+
+  // Generate improved UI
+  const handleGenerateImprovedUI = async () => {
+    if (!result) return
+
+    setIsGenerating(true)
+    setGenerationError(null)
+    setShowImprovedModal(true)
+    setIsSaved(false) // Reset saved state for new generation
+
+    try {
+      const improved = await generateImprovedUI(
+        screen?.image_url || null,
+        result
+      )
+      setImprovedUI(improved)
+
+      // Auto-save after generation
+      if (evaluationId) {
+        const success = await saveImprovedUI(evaluationId, improved.html, improved.description)
+        if (success) {
+          setIsSaved(true)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate improved UI:', error)
+      setGenerationError(error instanceof Error ? error.message : '개선된 UI 생성에 실패했습니다.')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  // Download improved UI as image
+  const handleDownloadImage = async () => {
+    if (!iframeRef.current?.contentDocument?.body) return
+
+    try {
+      const dataUrl = await captureAsImage(iframeRef.current.contentDocument.body)
+      const link = document.createElement('a')
+      link.download = `${result?.screenName || 'improved'}_개선안.png`
+      link.href = dataUrl
+      link.click()
+    } catch (error) {
+      console.error('Failed to capture image:', error)
+      // Fallback: download HTML
+      handleDownloadHTML()
+    }
+  }
+
+  // Download improved UI as HTML
+  const handleDownloadHTML = () => {
+    if (!improvedUI?.html) return
+
+    const blob = new Blob([improvedUI.html], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.download = `${result?.screenName || 'improved'}_개선안.html`
+    link.href = url
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
 
   if (isLoading) {
     return (
@@ -298,7 +386,7 @@ export function EvaluationResultPage({ isDarkMode, toggleDarkMode }: EvaluationR
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-foreground">UX Analyzer</span>
+            <span className="font-semibold text-foreground">zero1ux</span>
           </div>
           <Button
             variant="ghost"
@@ -397,6 +485,28 @@ export function EvaluationResultPage({ isDarkMode, toggleDarkMode }: EvaluationR
             <h3 className="font-semibold mb-2">종합 평가</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">{result.summary}</p>
           </div>
+
+          {/* Generate Improved UI Button */}
+          <div className="mt-6 flex justify-center gap-3">
+            {improvedUI && isSaved && (
+              <Button
+                onClick={() => setShowImprovedModal(true)}
+                variant="outline"
+                className="gap-2"
+              >
+                <Check className="w-4 h-4 text-green-500" />
+                저장된 UI 보기
+              </Button>
+            )}
+            <Button
+              onClick={handleGenerateImprovedUI}
+              disabled={isGenerating}
+              className="gap-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+            >
+              <Wand2 className="w-4 h-4" />
+              {improvedUI ? 'AI로 새로 생성하기' : 'AI로 개선된 UI 생성하기'}
+            </Button>
+          </div>
         </Card>
 
         {/* Category Results */}
@@ -406,6 +516,133 @@ export function EvaluationResultPage({ isDarkMode, toggleDarkMode }: EvaluationR
           ))}
         </div>
       </main>
+
+      {/* Improved UI Modal */}
+      {showImprovedModal && (
+        <div className="fixed inset-0 z-50 bg-background flex flex-col">
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                  <Wand2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="font-semibold">개선된 UI 미리보기</h2>
+                  <p className="text-sm text-muted-foreground">평가 결과를 반영한 UI 개선안</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {improvedUI && (
+                  <>
+                    {isSaved && (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-green-600 bg-green-50 dark:bg-green-950/30 rounded-md">
+                        <Check className="w-4 h-4" />
+                        자동 저장됨
+                      </div>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadHTML}
+                      className="gap-1"
+                    >
+                      <Download className="w-4 h-4" />
+                      HTML
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadImage}
+                      className="gap-1"
+                    >
+                      <Download className="w-4 h-4" />
+                      이미지
+                    </Button>
+                    <div className="w-px h-6 bg-border mx-1" />
+                    <Button
+                      variant={showDescription ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setShowDescription(!showDescription)}
+                      className="gap-1"
+                    >
+                      {showDescription ? (
+                        <PanelRightClose className="w-4 h-4" />
+                      ) : (
+                        <PanelRight className="w-4 h-4" />
+                      )}
+                      개선 내용
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowImprovedModal(false)}
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-hidden flex">
+              {/* Preview */}
+              <div className="flex-1 bg-muted/30 overflow-auto">
+                {isGenerating ? (
+                  <div className="flex flex-col items-center justify-center h-full">
+                    <Loader2 className="w-10 h-10 text-purple-500 animate-spin mb-4" />
+                    <p className="text-muted-foreground">AI가 원본 이미지를 분석하고 개선된 UI를 생성하고 있습니다...</p>
+                    <p className="text-sm text-muted-foreground mt-2">잠시만 기다려주세요</p>
+                  </div>
+                ) : generationError ? (
+                  <div className="flex flex-col items-center justify-center h-full">
+                    <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                      <X className="w-8 h-8 text-red-500" />
+                    </div>
+                    <p className="text-red-500 font-medium mb-2">생성 실패</p>
+                    <p className="text-sm text-muted-foreground">{generationError}</p>
+                    <Button
+                      variant="outline"
+                      className="mt-4"
+                      onClick={handleGenerateImprovedUI}
+                    >
+                      다시 시도
+                    </Button>
+                  </div>
+                ) : improvedUI ? (
+                  <iframe
+                    ref={iframeRef}
+                    srcDoc={improvedUI.html}
+                    className="w-full h-full border-0 bg-white"
+                    title="Improved UI Preview"
+                    sandbox="allow-scripts allow-same-origin"
+                  />
+                ) : null}
+              </div>
+
+              {/* Description Sidebar */}
+              {improvedUI && showDescription && (
+                <div className="w-72 border-l p-4 overflow-auto flex-shrink-0 animate-in slide-in-from-right duration-200">
+                  <h3 className="font-semibold mb-3">개선 내용</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {improvedUI.description}
+                  </p>
+
+                  <div className="mt-6 p-3 bg-muted/50 rounded-lg">
+                    <h4 className="text-sm font-medium mb-2">활용 방법</h4>
+                    <ul className="text-xs text-muted-foreground space-y-1.5">
+                      <li>• HTML 다운로드 → 개발자 전달</li>
+                      <li>• 이미지 저장 → 디자인 참고</li>
+                      <li>• Tailwind CSS 코드 참고</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -160,6 +160,10 @@ const heuristics = [
 
 // Domain-based heuristic recommendations
 const domainRecommendations: Record<string, string[]> = {
+  'UX': ['intuitiveness', 'learnability', 'feedback', 'user-control', 'internal-consistency', 'predictability'],
+  '분석': ['efficiency', 'intuitiveness', 'logic', 'feedback', 'alternatives', 'internal-consistency'],
+  'SaaS': ['efficiency', 'learnability', 'user-control', 'feedback', 'predictability', 'internal-consistency'],
+  '대시보드': ['intuitiveness', 'logic', 'feedback', 'user-control', 'alternatives', 'internal-consistency'],
   '이커머스': ['efficiency', 'responsiveness', 'error-prevention', 'feedback', 'intuitiveness', 'predictability'],
   '커머스': ['efficiency', 'responsiveness', 'error-prevention', 'feedback', 'intuitiveness', 'predictability'],
   '쇼핑': ['efficiency', 'responsiveness', 'error-recovery', 'intuitiveness', 'universality', 'alternatives'],
@@ -345,7 +349,7 @@ export function NewProjectPage({ isDarkMode, toggleDarkMode }: NewProjectPagePro
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold text-foreground">UX Analyzer</span>
+            <span className="font-semibold text-foreground">zero1ux</span>
           </div>
           <Button
             variant="ghost"
@@ -438,12 +442,19 @@ export function NewProjectPage({ isDarkMode, toggleDarkMode }: NewProjectPagePro
               <div className="space-y-2">
                 <Label htmlFor="projectName">
                   프로젝트 이름 <span className="text-destructive">*</span>
+                  <span className="text-xs text-muted-foreground ml-2">(Tab으로 자동완성)</span>
                 </Label>
                 <Input
                   id="projectName"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
-                  placeholder="예: 쇼핑몰 앱 UX 평가"
+                  placeholder="예: zero1ux 대시보드 개선"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !projectName.trim()) {
+                      e.preventDefault()
+                      setProjectName('zero1ux 대시보드 개선')
+                    }
+                  }}
                 />
               </div>
 
@@ -451,12 +462,19 @@ export function NewProjectPage({ isDarkMode, toggleDarkMode }: NewProjectPagePro
               <div className="space-y-2">
                 <Label htmlFor="serviceDomain">
                   서비스 도메인 <span className="text-destructive">*</span>
+                  <span className="text-xs text-muted-foreground ml-2">(Tab으로 자동완성)</span>
                 </Label>
                 <Input
                   id="serviceDomain"
                   value={serviceDomain}
                   onChange={(e) => setServiceDomain(e.target.value)}
-                  placeholder="예: 이커머스, 금융, 교육, 헬스케어"
+                  placeholder="예: UX 분석 SaaS"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !serviceDomain.trim()) {
+                      e.preventDefault()
+                      setServiceDomain('UX 분석 SaaS')
+                    }
+                  }}
                 />
               </div>
 
@@ -464,6 +482,7 @@ export function NewProjectPage({ isDarkMode, toggleDarkMode }: NewProjectPagePro
               <div className="space-y-2">
                 <Label htmlFor="serviceDescription">
                   서비스 설명 <span className="text-destructive">*</span>
+                  <span className="text-xs text-muted-foreground ml-2">(Tab으로 자동완성)</span>
                 </Label>
                 <Textarea
                   id="serviceDescription"
@@ -472,6 +491,12 @@ export function NewProjectPage({ isDarkMode, toggleDarkMode }: NewProjectPagePro
                   placeholder="서비스의 주요 기능과 특징을 설명해주세요..."
                   rows={4}
                   className="resize-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !serviceDescription.trim()) {
+                      e.preventDefault()
+                      setServiceDescription('AI 기반 UX 휴리스틱 평가 도구입니다. URL 입력만으로 스크린샷 분석, 평가 기준별 점수 산정, 개선 제안 리포트를 자동 생성합니다.')
+                    }
+                  }}
                 />
               </div>
 
@@ -479,12 +504,19 @@ export function NewProjectPage({ isDarkMode, toggleDarkMode }: NewProjectPagePro
               <div className="space-y-2">
                 <Label htmlFor="targetUsers">
                   타겟 사용자 <span className="text-muted-foreground">(선택)</span>
+                  <span className="text-xs text-muted-foreground ml-2">(Tab으로 자동완성)</span>
                 </Label>
                 <Input
                   id="targetUsers"
                   value={targetUsers}
                   onChange={(e) => setTargetUsers(e.target.value)}
-                  placeholder="예: 20-30대 직장인, 시니어 사용자"
+                  placeholder="예: UX 디자이너, PM, 바이브 코더"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Tab' && !targetUsers.trim()) {
+                      e.preventDefault()
+                      setTargetUsers('UX 디자이너, 프로덕트 매니저, 초보 바이브 코더')
+                    }
+                  }}
                 />
               </div>
             </div>

@@ -179,6 +179,8 @@ export interface EvaluationResultDB {
   total_improvements: number
   summary: string
   categories: unknown // JSONB
+  improved_ui_html: string | null
+  improved_ui_description: string | null
   created_at: string
 }
 
@@ -218,6 +220,29 @@ export async function saveEvaluationResult(data: {
 
   console.log('Evaluation result saved:', result)
   return result
+}
+
+// Save improved UI to evaluation result
+export async function saveImprovedUI(
+  evaluationId: string,
+  html: string,
+  description: string
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('evaluation_results')
+    .update({
+      improved_ui_html: html,
+      improved_ui_description: description,
+    })
+    .eq('id', evaluationId)
+
+  if (error) {
+    console.error('Error saving improved UI:', error)
+    return false
+  }
+
+  console.log('Improved UI saved for evaluation:', evaluationId)
+  return true
 }
 
 // Get evaluation results by screen ID
