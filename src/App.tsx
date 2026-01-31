@@ -270,7 +270,11 @@ function HomePage({ isDarkMode, toggleDarkMode }: HomePageProps) {
 }
 
 function App() {
-  const [isDarkMode, setIsDarkMode] = useState(false)
+  const [isDarkMode, setIsDarkMode] = useState(true)
+
+  useEffect(() => {
+    document.documentElement.classList.add('dark')
+  }, [])
 
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode)
