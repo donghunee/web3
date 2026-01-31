@@ -331,8 +331,16 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
       setEvaluationStep('saving')
       setEvaluationProgress(90)
 
+      // screen_id가 유효한 UUID 형식인지 확인
+      const isValidUUID = (id: string) => {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        return uuidRegex.test(id)
+      }
+
+      const screenIdToSave = screen.id.startsWith('local-') || !isValidUUID(screen.id) ? null : screen.id
+
       const savedResult = await saveEvaluationResult({
-        screen_id: screen.id.startsWith('local-') ? null : screen.id,
+        screen_id: screenIdToSave,
         screen_name: result.screenName,
         overall_score: result.overallScore,
         total_strengths: result.totalStrengths,
@@ -340,6 +348,10 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
         summary: result.summary,
         categories: result.categories,
       })
+
+      if (!savedResult) {
+        console.warn('평가 결과 저장에 실패했지만 결과 페이지로 이동합니다.')
+      }
 
       // Step 5: Complete
       setEvaluationStep('complete')
@@ -405,7 +417,10 @@ export function ProjectDetailPage({ isDarkMode, toggleDarkMode }: ProjectDetailP
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2 cursor-pointer"
+            onClick={() => navigate('/')}
+          >
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>

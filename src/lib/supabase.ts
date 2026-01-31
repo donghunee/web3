@@ -192,25 +192,31 @@ export async function saveEvaluationResult(data: {
   summary: string
   categories: unknown
 }): Promise<EvaluationResultDB | null> {
+  const insertData = {
+    screen_id: data.screen_id || null,
+    screen_name: data.screen_name,
+    overall_score: data.overall_score,
+    total_strengths: data.total_strengths,
+    total_improvements: data.total_improvements,
+    summary: data.summary,
+    categories: data.categories,
+  }
+
+  console.log('Saving evaluation result:', insertData)
+
   const { data: result, error } = await supabase
     .from('evaluation_results')
-    .insert({
-      screen_id: data.screen_id || null,
-      screen_name: data.screen_name,
-      overall_score: data.overall_score,
-      total_strengths: data.total_strengths,
-      total_improvements: data.total_improvements,
-      summary: data.summary,
-      categories: data.categories,
-    })
+    .insert(insertData)
     .select()
     .single()
 
   if (error) {
     console.error('Error saving evaluation result:', error)
+    console.error('Error details:', JSON.stringify(error, null, 2))
     return null
   }
 
+  console.log('Evaluation result saved:', result)
   return result
 }
 

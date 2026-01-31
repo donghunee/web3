@@ -70,7 +70,10 @@ function HomePage({ isDarkMode, toggleDarkMode }: HomePageProps) {
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2 cursor-pointer"
+            onClick={() => navigate('/')}
+          >
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
@@ -105,12 +108,12 @@ function HomePage({ isDarkMode, toggleDarkMode }: HomePageProps) {
             더 나은 사용자 경험을 위한
           </h1>
           <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-blue-600 mb-6">
-            휴리스틱 평가 서비스
+            사용성 평가 서비스
           </h2>
 
           {/* Description */}
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
-            AI가 웹 인터페이스를 분석하고 닐슨의 10가지 휴리스틱 원칙에 기반한 전문적인 사용성 평가 리포트를 제공합니다.
+            서비스 컨텍스트를 설정해 주세요. 입력된 서비스 설명을 바탕으로 적절한 사용성 평가 기준을 설립해 일관된 기준으로 사용성을 평가해 드립니다.
           </p>
 
           {/* CTA Button */}

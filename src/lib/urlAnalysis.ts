@@ -1,5 +1,8 @@
 // URL Analysis utilities
 
+// Backend API URL - uses environment variable or localhost default
+const ANALYSIS_API_URL = import.meta.env.VITE_ANALYSIS_API_URL || 'http://localhost:3001/api'
+
 export interface UrlMetadata {
   title: string
   description: string
@@ -11,6 +14,55 @@ export interface UrlMetadata {
 export interface UrlAnalysisResult {
   screenshotUrl: string
   metadata: UrlMetadata
+  domAnalysis?: {
+    totalElements: number
+    interactiveElements: Array<{
+      type: string
+      text: string
+      boundingBox: { x: number; y: number; width: number; height: number } | null
+    }>
+    headings: Array<{ level: number; text: string }>
+    images: Array<{ src: string; hasAlt: boolean }>
+  }
+  accessibility?: {
+    score: number
+    issueCount: number
+    issues: Array<{ type: string; severity: string; message: string }>
+  }
+  performance?: {
+    loadTime: number
+    domContentLoaded: number
+    resourceCount: number
+  }
+}
+
+// Backend API response types
+interface BackendAnalysisResponse {
+  success: boolean
+  data?: {
+    url: string
+    analyzedAt: string
+    screenshot: {
+      base64: string
+      format: string
+      width: number
+      height: number
+    }
+    metadata: {
+      title: string
+      description: string
+      image: string | null
+      siteName: string | null
+      url: string
+    }
+    domAnalysis?: UrlAnalysisResult['domAnalysis']
+    accessibility?: UrlAnalysisResult['accessibility']
+    performance?: UrlAnalysisResult['performance']
+  }
+  error?: {
+    code: string
+    message: string
+  }
 }
 
 // Get screenshot URL using different services
@@ -113,6 +165,64 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata> {
   }
 }
 
+// Analyze URL using self-hosted Puppeteer backend
+async function analyzeUrlWithBackend(url: string): Promise<UrlAnalysisResult | null> {
+  try {
+    console.log('Trying Puppeteer backend API...')
+
+    const response = await fetch(`${ANALYSIS_API_URL}/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        options: {
+          fullPageScreenshot: false,
+          screenshotWidth: 1280,
+          screenshotHeight: 720,
+          screenshotFormat: 'png',
+          includeDomAnalysis: true,
+          includeAccessibility: true,
+          includePerformance: true,
+        },
+      }),
+    })
+
+    if (!response.ok) {
+      console.log('Backend API error:', response.status)
+      return null
+    }
+
+    const data: BackendAnalysisResponse = await response.json()
+
+    if (!data.success || !data.data) {
+      console.log('Backend API returned error:', data.error)
+      return null
+    }
+
+    // Convert base64 screenshot to data URL
+    const screenshotUrl = `data:image/${data.data.screenshot.format};base64,${data.data.screenshot.base64}`
+
+    return {
+      screenshotUrl,
+      metadata: {
+        title: data.data.metadata.title,
+        description: data.data.metadata.description,
+        image: data.data.metadata.image,
+        url: data.data.metadata.url,
+        siteName: data.data.metadata.siteName,
+      },
+      domAnalysis: data.data.domAnalysis,
+      accessibility: data.data.accessibility,
+      performance: data.data.performance,
+    }
+  } catch (error) {
+    console.log('Backend API fetch error:', error)
+    return null
+  }
+}
+
 // Analyze URL: get screenshot and metadata
 export async function analyzeUrl(url: string): Promise<UrlAnalysisResult> {
   // Validate URL
@@ -121,6 +231,16 @@ export async function analyzeUrl(url: string): Promise<UrlAnalysisResult> {
   } catch {
     throw new Error('Invalid URL')
   }
+
+  // 1. Try self-hosted Puppeteer backend first (best quality)
+  const backendResult = await analyzeUrlWithBackend(url)
+  if (backendResult) {
+    console.log('Using Puppeteer backend result')
+    return backendResult
+  }
+
+  // 2. Fallback to external services
+  console.log('Falling back to external services...')
 
   // Fetch metadata first
   const metadata = await fetchUrlMetadata(url)

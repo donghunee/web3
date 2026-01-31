@@ -1,6 +1,16 @@
 // Evaluation criteria structure
 export const evaluationCategories = [
   {
+    id: 'ui-design',
+    name: 'UI 디자인',
+    criteria: [
+      { id: 'visual-hierarchy', name: '시각적 계층', question: '정보의 중요도에 따라 시각적 계층이 명확하게 구성되어 있는가?' },
+      { id: 'color-contrast', name: '색상 및 대비', question: '색상 사용이 적절하고 텍스트와 배경의 대비가 가독성을 보장하는가?' },
+      { id: 'typography', name: '타이포그래피', question: '폰트 크기, 굵기, 행간이 가독성과 심미성을 고려하여 적절하게 설정되어 있는가?' },
+      { id: 'spacing-layout', name: '여백 및 레이아웃', question: '요소 간 여백과 정렬이 일관되고 시각적으로 편안한가?' },
+    ]
+  },
+  {
     id: 'convenience',
     name: '편의성',
     criteria: [
@@ -173,28 +183,34 @@ ${imageUrl ? `- 스크린샷이 제공되었습니다. 이미지를 분석하여
 - "레이아웃이 좋습니다" ❌
 - "색상이 적절합니다" ❌
 
-## 평가 기준 (5개 카테고리, 14개 세부 항목)
+## 평가 기준 (6개 카테고리, 18개 세부 항목)
 
-1. 편의성
+1. UI 디자인
+   - 시각적 계층: 정보의 중요도에 따라 시각적 계층이 명확하게 구성되어 있는가?
+   - 색상 및 대비: 색상 사용이 적절하고 텍스트와 배경의 대비가 가독성을 보장하는가?
+   - 타이포그래피: 폰트 크기, 굵기, 행간이 가독성과 심미성을 고려하여 적절하게 설정되어 있는가?
+   - 여백 및 레이아웃: 요소 간 여백과 정렬이 일관되고 시각적으로 편안한가?
+
+2. 편의성
    - 효율성, 편의성: 원하는 목적을 달성하는데 소모되는 자원의 효율이 최적화되어 있는가?
    - 반응성: 사용자의 조작에 따라 인터페이스가 활성화됨을 시각적으로 명확하게 확인할 수 있는가?
 
-2. 정확성
+3. 정확성
    - 오류 회복성: 예상치 못한 오류 발생 시 사후처리, 조치에 대한 인터랙션이 적절하게 일어나는가?
    - 사전 방지성: 오류가 발생하기 직전 시스템 상에서 사용자가 실수하지 않도록 가이드를 제공하고 있는가?
    - 학습 용이성: 사용자가 응용법을 적절히 배울/인지할 수 있도록 서비스가 지원하고 있는가?
 
-3. 의미성
+4. 의미성
    - 피드백: 시스템의 상태가 전환되었을 때 사용자가 인지할 수 있는 인터랙션을 제공하고 있는가?
    - 직관성: 상대적인 정보의 중요도를 고려한 화면이 구성되어 있는가?
    - 보편성: 사용자에게 시각적으로 익숙한 디자인과 화면구성을 제공하고 있는가?
    - 논리성: 정보의 구성이나 순서가 논리적으로 제공되고 있어 이해하기 쉬운가?
 
-4. 유연성
+5. 유연성
    - 사용자 주도권: 처음 지정된 것 이외의 작업 또는 환경의 변화에 사용자가 적절히 적응할 수 있는가?
    - 대체성: 접근방식의 다양성으로 사용자의 기호에 맞게 선택할 수 있는 권한이 주어지고 있는가?
 
-5. 일관성
+6. 일관성
    - 예측성: 보편적으로 사용되는 형태로 제공되어 사용자가 충분히 예측가능한 기능이 제공되고 있는가?
    - 규칙성: 사용의 특정 목적, 기능 및 조건을 이해할 수 있는 서비스인가?
    - 내부적 일관성: 해당 서비스 내 화면들이 일관된 스타일로 규칙을 가지고 있는가?
@@ -206,12 +222,23 @@ ${imageUrl ? `- 스크린샷이 제공되었습니다. 이미지를 분석하여
   "summary": "화면 전체 레이아웃과 주요 UI 요소에 대한 2-3문장 요약",
   "categories": [
     {
+      "id": "ui-design", "name": "UI 디자인", "score": 4.0,
+      "summary": "카테고리 전체 요약 (2-3문장)",
+      "improvements": ["상세 개선사항 또는 장점"],
+      "criteria": [
+        {"id": "visual-hierarchy", "name": "시각적 계층", "score": 4.0, "improvements": ["상세 내용"]},
+        {"id": "color-contrast", "name": "색상 및 대비", "score": 4.0, "improvements": ["상세 내용"]},
+        {"id": "typography", "name": "타이포그래피", "score": 4.0, "improvements": ["상세 내용"]},
+        {"id": "spacing-layout", "name": "여백 및 레이아웃", "score": 4.0, "improvements": ["상세 내용"]}
+      ]
+    },
+    {
       "id": "convenience", "name": "편의성", "score": 4.0,
       "summary": "카테고리 전체 요약 (2-3문장)",
-      "improvements": ["[문제] → [원인] → [해결책] 형식의 상세 개선사항"],
+      "improvements": ["상세 개선사항 또는 장점"],
       "criteria": [
-        {"id": "efficiency", "name": "효율성, 편의성", "score": 4.0, "improvements": ["상세 개선사항"]},
-        {"id": "responsiveness", "name": "반응성", "score": 4.0, "improvements": ["상세 개선사항"]}
+        {"id": "efficiency", "name": "효율성, 편의성", "score": 4.0, "improvements": ["상세 내용"]},
+        {"id": "responsiveness", "name": "반응성", "score": 4.0, "improvements": ["상세 내용"]}
       ]
     }
   ]
@@ -271,7 +298,7 @@ ${imageUrl ? `- 스크린샷이 제공되었습니다. 이미지를 분석하여
 - 실제 측정 가능한 수치(px, 초, 클릭 수 등)를 포함하면 좋음
 - 업계 표준이나 모범 사례 참조 시 출처 언급 (예: "Material Design 가이드라인에 따르면...")
 
-주의: categories 배열에는 convenience, accuracy, meaningfulness, flexibility, consistency 5개가 모두 포함되어야 합니다.
+주의: categories 배열에는 ui-design, convenience, accuracy, meaningfulness, flexibility, consistency 6개가 모두 포함되어야 합니다.
 
 점수는 1.0~5.0 사이로 소수점 한자리까지 평가해주세요.
 반드시 위 형식의 완전한 JSON만 응답하고 다른 텍스트는 포함하지 마세요.`
@@ -417,12 +444,25 @@ ${imageUrl ? `- 스크린샷이 제공되었습니다. 이미지를 분석하여
       totalImprovements += cat.improvements?.length || 0
     })
 
-    const overallScore = totalScore / parsed.categories.length
+    // 점수 계산 및 유효 범위 확인 (1.0 ~ 5.0)
+    let overallScore = parsed.categories.length > 0
+      ? totalScore / parsed.categories.length
+      : 3.0 // 기본값
+
+    overallScore = Math.round(overallScore * 10) / 10
+    overallScore = Math.max(1.0, Math.min(5.0, overallScore)) // 1.0 ~ 5.0 범위 보장
+
+    console.log('Evaluation result calculated:', {
+      overallScore,
+      totalStrengths,
+      totalImprovements,
+      categoriesCount: parsed.categories.length
+    })
 
     return {
       screenId: `eval-${Date.now()}`,
       screenName,
-      overallScore: Math.round(overallScore * 10) / 10,
+      overallScore,
       totalStrengths,
       totalImprovements,
       summary: parsed.summary,
